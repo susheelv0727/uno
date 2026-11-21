@@ -133,7 +133,7 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
   animation:none;
 }
 @keyframes buzzPulse{50%{transform:scale(1.04);box-shadow:0 10px 0 #3b0000, 0 18px 28px rgba(229,57,53,.35), 0 16px 22px rgba(0,0,0,.45), inset 0 6px 12px rgba(255,255,255,.35), inset 0 -8px 14px rgba(0,0,0,.2)}}
-#hand{display:flex;justify-content:flex-start;overflow-x:auto;overflow-y:visible;padding:30px 14px 28px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+#hand{display:flex;justify-content:center;justify-content:safe center;overflow-x:auto;overflow-y:visible;padding:30px 14px 28px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 #hand::-webkit-scrollbar{display:none}
 #hand .card{--rot:0deg;--ty:0px;--lift:0px;--sc:1;margin-left:calc(var(--cw)*var(--ol, -0.32));transition:transform .14s ease, box-shadow .12s, filter .12s;cursor:default;transform:translateY(calc(var(--ty) + var(--lift))) rotate(var(--rot)) scale(var(--sc));transform-origin:bottom center}
 #hand .card:first-child{margin-left:0}
@@ -340,10 +340,22 @@ let S = null, es = null, roomCode = null, prevTurn = null, seenLog = 0, chatOpen
 let musicOn = store.get('uno_music') !== '0';
 let audioCtx = null, musicMaster = null, musicInterval = null;
 let timerRAF = null;
+let audioUnlocked = false, prevSelfUnoNeeded = false;
 
 function ensureAudio() {
   try { const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return null; if (!audioCtx) audioCtx = new AC(); if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {}); return audioCtx; } catch { return null; }
 }
+function unlockAudio() {
+  if (audioUnlocked) { if (musicOn && S && S.phase === 'playing' && !musicInterval) startMusic(); try { ensureAudio(); } catch {} return; }
+  audioUnlocked = true;
+  try { const ctx = ensureAudio(); if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); } catch {}
+  try { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(' '); u.volume = 0; window.speechSynthesis.speak(u); } } catch {}
+  if (musicOn && S && S.phase === 'playing') startMusic();
+}
+window.addEventListener('pointerdown', unlockAudio, { passive: true });
+window.addEventListener('touchstart', unlockAudio, { passive: true });
+window.addEventListener('keydown', unlockAudio);
+
 function stopMusic() { if (musicInterval) { clearInterval(musicInterval); musicInterval = null; } if (musicMaster) { try { musicMaster.disconnect(); } catch {} musicMaster = null; } }
 function startMusic() {
   if (!musicOn || musicInterval) return;
@@ -375,7 +387,7 @@ function speakUno() {
   try { if (!('speechSynthesis' in window)) return; window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance('UNO!'); u.rate = 0.95; u.pitch = 1.1; u.volume = 1; window.speechSynthesis.speak(u); } catch {}
 }
 function maybeAnnounceUno() {
-  if (!S || !Array.isArray(S.log)) { prevLog = S ? S.log : null; return; }
+  if (!S || !Array.isArray(S.log)) { prevLog = S ? S.log : null; prevSelfUnoNeeded = false; return; }
   if (prevLog) {
     for (let i = prevLog.length; i < S.log.length; i++) {
       const e = S.log[i];
@@ -383,6 +395,9 @@ function maybeAnnounceUno() {
     }
   }
   prevLog = S.log.slice();
+  const selfUnoNeeded = (S.phase === 'playing') && ((S.vuln === S.you) || (((S.hand || []).length === 1) && !S.saidUno));
+  if (selfUnoNeeded && !prevSelfUnoNeeded) speakUno();
+  prevSelfUnoNeeded = selfUnoNeeded;
 }
 
 function tickTimer() {
@@ -533,7 +548,8 @@ function renderGame() {
 
   const acts = $('#actions'); acts.replaceChildren();
   if (S.phase === 'playing') {
-    if ((myTurn && (S.hand || []).length <= 2 && !S.saidUno) || S.vuln === S.you) acts.append(h('button', { class: 'btn uno', text: 'UNO!', onclick: () => act('uno') }));
+    const unoNeeded = ((S.hand || []).length === 1 && !S.saidUno) || S.vuln === S.you || (myTurn && (S.hand || []).length === 2 && !S.saidUno);
+    if (unoNeeded) acts.append(h('button', { class: 'btn uno', text: 'UNO!', onclick: () => act('uno') }));
     if (S.vuln && S.vuln !== S.you) { const v = (S.players || []).find(p => p.id === S.vuln); acts.append(h('button', { class: 'btn primary', text: `Catch ${v ? v.name : ''}!`, onclick: () => act('catch') })); }
     if (myTurn && S.drawn !== null) acts.append(h('button', { class: 'btn', text: 'Pass', onclick: () => act('pass') }));
     if (myTurn && S.saidUno) acts.append(h('span', { class: 'tag', text: 'UNO ✓' }));
@@ -545,7 +561,7 @@ function renderGame() {
   const nCards = sorted.length;
   const ol = nCards <= 6 ? -0.32 : nCards <= 10 ? -0.22 : nCards <= 14 ? -0.14 : -0.06;
   hand.style.setProperty('--ol', ol);
-  hand.style.justifyContent = nCards <= 5 ? 'safe center' : 'flex-start';
+  hand.style.justifyContent = 'safe center';
   const mid = (nCards - 1) / 2;
   sorted.forEach((c, i) => {
     const ok = Array.isArray(S.playable) && S.playable.includes(c.id);

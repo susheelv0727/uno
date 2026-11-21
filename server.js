@@ -429,9 +429,10 @@ function view(room, pid) {
 
 function broadcast(room) {
   for (const [pid, set] of room.clients) {
-    for (const res of set) {
-      try { res.write('data: ' + JSON.stringify(view(room, pid)) + '\n\n'); } catch (e) { /* ignore */ }
+    for (const res of [...set]) {
+      try { res.write('data: ' + JSON.stringify(view(room, pid)) + '\n\n'); } catch (e) { set.delete(res); }
     }
+    if (set.size === 0) room.clients.delete(pid);
   }
 }
 
@@ -548,6 +549,7 @@ function sse(req, res, url) {
   set.add(res);
   p.connected = true;
   room.lastActive = Date.now();
+  try { res.write('data: ' + JSON.stringify(view(room, pid)) + '\n\n'); } catch (e) { /* ignore */ }
   broadcast(room);
   req.on('close', () => {
     set.delete(res);
