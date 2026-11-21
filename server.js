@@ -335,7 +335,7 @@ function view(room, pid) {
   }
   return {
     code: room.code, phase: room.phase, you: pid, host: room.hostId, opts: room.opts,
-    players: room.players.map((p) => ({ id: p.id, name: p.name, count: p.hand.length, connected: p.connected, wins: p.wins })),
+    players: room.players.map((p) => ({ id: p.id, name: p.name, avatar: p.avatar || '🙂', count: p.hand.length, connected: p.connected, wins: p.wins })),
     hand: me ? me.hand : [],
     top: room.discard.length ? topCard(room) : null,
     color: room.color, turn: cur ? cur.id : null, dir: room.dir,
@@ -386,7 +386,7 @@ function json(res, status, obj) {
 function readBody(req) {
   return new Promise((resolve) => {
     let data = '';
-    req.on('data', (d) => { data += d; if (data.length > 10000) req.destroy(); });
+    req.on('data', (d) => { data += d; if (data.length > 80000) req.destroy(); });
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')); } catch (e) { resolve({}); } });
     req.on('error', () => resolve({}));
   });
@@ -394,11 +394,19 @@ function readBody(req) {
 
 const validPid = (s) => typeof s === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(s);
 const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 14) || 'Player';
+const cleanAvatar = (s) => {
+  if (typeof s !== 'string') return '';
+  s = s.trim();
+  if (!s) return '';
+  if (s.startsWith('data:image/')) return s.length <= 50000 ? s : '';
+  return Array.from(s).slice(0, 4).join('');
+};
 
 async function apiJoin(req, res) {
   const b = await readBody(req);
   if (!validPid(b.pid)) return json(res, 400, { ok: false, error: 'Bad player id' });
   const name = cleanName(b.name);
+  const avatar = cleanAvatar(b.avatar);
   let room;
   if (b.room) {
     room = rooms.get(String(b.room).toUpperCase().trim());
@@ -409,10 +417,11 @@ async function apiJoin(req, res) {
   let p = room.players.find((x) => x.id === b.pid);
   if (p) {
     p.name = name;
+    if (avatar) p.avatar = avatar;
   } else {
     if (room.phase === 'playing') return json(res, 200, { ok: false, error: 'That game is already in progress' });
     if (room.players.length >= MAX_PLAYERS) return json(res, 200, { ok: false, error: 'Room is full' });
-    p = { id: b.pid, name, hand: [], connected: false, wins: 0, said: false };
+    p = { id: b.pid, name, avatar: avatar || '🙂', hand: [], connected: false, wins: 0, said: false };
     room.players.push(p);
     if (!room.hostId) room.hostId = p.id;
     addLog(room, `${name} joined`);

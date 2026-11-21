@@ -40,6 +40,16 @@ h1 span{color:var(--y)}
 .pitem{display:flex;align-items:center;gap:10px;background:rgba(255,255,255,.08);padding:10px 12px;border-radius:10px}
 .pitem .nm{flex:1;font-weight:600}
 .pitem.off{opacity:.45}
+.av,.avimg{width:34px;height:34px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:rgba(255,255,255,.15);font-size:20px;flex:none;overflow:hidden}
+.avimg{object-fit:cover}
+.av.sm,.avimg.sm{width:24px;height:24px;font-size:14px}
+.av.lg,.avimg.lg{width:48px;height:48px;font-size:28px}
+.avbtn{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.12);font-size:28px;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:none}
+.avbtn span,.avbtn img{width:100%;height:100%;border-radius:14px;display:flex;align-items:center;justify-content:center;object-fit:cover}
+.avpanel{padding:10px}
+.avgrid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px}
+.avopt{background:rgba(255,255,255,.1);border-radius:10px;height:38px;font-size:22px;display:flex;align-items:center;justify-content:center}
+.avopt.on{outline:2px solid var(--y);background:rgba(255,255,255,.18)}
 .tag{font-size:11px;background:var(--y);color:#222;padding:2px 7px;border-radius:99px;font-weight:700}
 .x{background:rgba(255,255,255,.12);border-radius:8px;width:28px;height:28px;line-height:1}
 label.chk{display:flex;align-items:center;gap:10px;font-size:15px}
@@ -79,7 +89,8 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
 .opp{background:var(--panel);border:2px solid transparent;border-radius:12px;padding:6px 10px;min-width:92px;text-align:center;position:relative}
 .opp.turn{border-color:var(--y);box-shadow:0 0 14px rgba(253,216,53,.5)}
 .opp.off{opacity:.45}
-.opp .on{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+.opp .oh{display:flex;align-items:center;justify-content:center;gap:6px;margin-bottom:2px}
+.opp .on{font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:90px}
 .opp .oc{display:flex;align-items:center;justify-content:center;gap:8px;margin-top:4px;height:34px}
 .opp .oc b{font-size:18px}
 .opp .ow{font-size:11px;opacity:.8}
@@ -97,14 +108,18 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
 #log3{font-size:12px;opacity:.7;text-align:center;min-height:48px;padding:0 14px}
 #actions{display:flex;gap:10px;justify-content:center;min-height:46px;padding:4px 10px;flex-wrap:wrap}
 .uno{background:var(--r);color:#fff;font-size:20px;padding:10px 26px;border-radius:99px;animation:pulse .8s infinite}
-#hand{display:flex;justify-content:safe center;overflow-x:auto;padding:26px 14px 12px;scrollbar-width:none}
+#hand{display:flex;justify-content:flex-start;overflow-x:auto;overflow-y:visible;padding:26px 14px 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 #hand::-webkit-scrollbar{display:none}
-#hand .card{margin-left:calc(var(--cw)*-.32);transition:transform .12s}
+#hand .card{margin-left:calc(var(--cw)*var(--ol, -0.32));transition:transform .12s, box-shadow .12s, filter .12s;cursor:default}
 #hand .card:first-child{margin-left:0}
+#hand .card:hover{transform:translateY(-14px) scale(1.04);z-index:5;filter:brightness(1.05)}
 #hand .card.ok{transform:translateY(-16px);box-shadow:0 0 0 3px #fff,0 0 14px 3px rgba(255,255,255,.7);cursor:pointer;z-index:2}
+#hand .card.ok:hover{transform:translateY(-22px) scale(1.05);z-index:6}
 #hand .card.no{filter:brightness(.55)}
+#hand .card.no:hover{transform:translateY(-8px);filter:brightness(.7);z-index:4}
 #hand.mine{background:linear-gradient(transparent,rgba(253,216,53,.14))}
 .hl{text-align:center;font-size:12px;opacity:.7;margin-top:-4px;padding-bottom:6px}
+.hlrow{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;opacity:.9;margin-top:-4px;padding-bottom:6px}
 
 /* overlays */
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:20;padding:16px}
@@ -112,7 +127,9 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
 .box{background:#16342a;border-radius:18px;padding:20px;width:min(380px,100%);display:flex;flex-direction:column;gap:12px;text-align:center}
 .cpick{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .cpick button{height:72px;border-radius:16px;border:3px solid #fff}
-.score{display:flex;justify-content:space-between;padding:6px 10px;background:rgba(255,255,255,.08);border-radius:8px}
+.score{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:rgba(255,255,255,.08);border-radius:8px;gap:8px}
+.score .sl{display:flex;align-items:center;gap:8px;min-width:0}
+.score .sl span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #chat{position:fixed;left:0;right:0;bottom:0;top:30%;background:#10281f;border-radius:18px 18px 0 0;z-index:15;display:none;flex-direction:column;box-shadow:0 -6px 30px rgba(0,0,0,.6)}
 #chat.on{display:flex}
 #chat header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;font-weight:700}
@@ -133,7 +150,17 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
   <div class="center">
     <h1>Uno <span>Night</span></h1>
     <div class="sub">Card game for you and your friends</div>
-    <input id="name" class="field" maxlength="14" placeholder="Your name" autocomplete="off">
+    <div class="row" style="align-items:center">
+      <button id="avpick" class="avbtn" type="button" title="Choose avatar"><span id="avcur">🙂</span></button>
+      <input id="name" class="field" maxlength="14" placeholder="Your name" autocomplete="off" style="flex:1">
+    </div>
+    <div id="avpanel" class="panel avpanel" style="display:none">
+      <div class="avgrid" id="avgrid"></div>
+      <div class="row" style="margin-top:8px">
+        <label class="btn ghost sm" style="flex:1;text-align:center;cursor:pointer">Upload image<input id="avfile" type="file" accept="image/*" style="display:none"></label>
+        <button id="avclose" class="btn ghost sm" type="button">Done</button>
+      </div>
+    </div>
     <button id="create" class="btn primary">Create a room</button>
     <div class="or">— or join a friend's room —</div>
     <div class="row">
@@ -234,11 +261,84 @@ if (!pid) {
   pid = Array.from(a, (x) => x.toString(16).padStart(2, '0')).join('');
   store.set('uno_pid', pid);
 }
+
+const AV_PRESETS = ['🙂','😎','🤖','🐱','🐶','🦊','🐼','🐸','🦄','👻','🔥','⭐','🍕','🎮','🚀','🌈'];
+let myAvatar = store.get('uno_avatar') || '🙂';
+function avatarNode(av, cls = '') {
+  const a = av || '🙂';
+  if (typeof a === 'string' && a.startsWith('data:image/')) return h('img', { class: 'avimg ' + cls, src: a, alt: '' });
+  return h('span', { class: 'av ' + cls, text: a });
+}
+function setAvatar(av) {
+  myAvatar = av || '🙂';
+  store.set('uno_avatar', myAvatar);
+  const cur = $('#avcur');
+  if (cur) cur.replaceChildren(avatarNode(myAvatar));
+  for (const b of document.querySelectorAll('.avopt')) b.classList.toggle('on', b.dataset.av === myAvatar);
+}
+function renderAvatarPicker() {
+  const g = $('#avgrid'); if (!g) return;
+  g.replaceChildren(...AV_PRESETS.map((a) => h('button', {
+    class: 'avopt' + (a === myAvatar ? ' on' : ''), type: 'button', text: a, 'data-av': a,
+    onclick: () => setAvatar(a),
+  })));
+}
+$('#avpick').onclick = () => { const p = $('#avpanel'); p.style.display = p.style.display === 'none' ? '' : 'none'; renderAvatarPicker(); };
+$('#avclose').onclick = () => { $('#avpanel').style.display = 'none'; };
+$('#avfile').onchange = (e) => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  const img = new Image();
+  const url = URL.createObjectURL(f);
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas'); const s = 64;
+      c.width = s; c.height = s;
+      const ctx = c.getContext('2d');
+      const m = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - m) / 2, (img.height - m) / 2, m, m, 0, 0, s, s);
+      setAvatar(c.toDataURL('image/jpeg', 0.82));
+    } finally { URL.revokeObjectURL(url); }
+  };
+  img.onerror = () => { URL.revokeObjectURL(url); toast('Could not load image'); };
+  img.src = url;
+  e.target.value = '';
+};
+setAvatar(myAvatar);
 $('#name').value = store.get('uno_name') || '';
 const urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
 if (urlRoom) $('#code').value = urlRoom;
 
-let S = null, es = null, roomCode = null, prevTurn = null, seenLog = 0, chatOpen = false;
+let S = null, es = null, roomCode = null, prevTurn = null, seenLog = 0, chatOpen = false, prevLog = null;
+
+function speakUno(text) {
+  try {
+    if (!('speechSynthesis' in window)) return;
+    const name = String(text || '').replace(/:\s*UNO!$/, '').trim();
+    const u = new SpeechSynthesisUtterance(name ? `${name} says UNO!` : 'UNO!');
+    u.rate = 1.05; u.pitch = 1.1; u.volume = 1;
+    speechSynthesis.cancel();
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+function maybeAnnounceUno() {
+  if (!S) return;
+  const cur = S.log || [];
+  if (!prevLog) { prevLog = cur.slice(); return; }
+  const last = prevLog[prevLog.length - 1];
+  let idx = -1;
+  if (last) {
+    for (let i = cur.length - 1; i >= 0; i--) {
+      const l = cur[i];
+      if (l && l.k === last.k && l.text === last.text && (l.who || '') === (last.who || '')) { idx = i; break; }
+    }
+  }
+  const fresh = idx >= 0 ? cur.slice(idx + 1) : (cur.length > prevLog.length ? cur.slice(prevLog.length) : []);
+  for (const l of fresh) {
+    if (l && l.k === 'sys' && /:\s*UNO!$/.test(l.text || '')) speakUno(l.text);
+  }
+  prevLog = cur.slice();
+}
 
 function toast(msg) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('on');
@@ -262,7 +362,8 @@ async function enter(code) {
   const name = $('#name').value.trim();
   if (!name) { toast('Enter your name first'); $('#name').focus(); return; }
   store.set('uno_name', name);
-  const r = await api('/api/join', { pid, name, room: code || undefined });
+  store.set('uno_avatar', myAvatar);
+  const r = await api('/api/join', { pid, name, room: code || undefined, avatar: myAvatar });
   if (!r.ok) { toast(r.error); return; }
   connect(r.room);
 }
@@ -274,12 +375,12 @@ function connect(code) {
   es.addEventListener('removed', () => goHome('You left the room'));
   es.onerror = async () => {
     if (es.readyState !== 2) return; // browser is retrying by itself
-    const r = await api('/api/join', { pid, name: $('#name').value.trim() || store.get('uno_name') || 'Player', room: roomCode });
+    const r = await api('/api/join', { pid, name: $('#name').value.trim() || store.get('uno_name') || 'Player', room: roomCode, avatar: myAvatar });
     if (r.ok) connect(roomCode); else goHome(r.error || 'Disconnected');
   };
 }
 function goHome(msg) {
-  if (es) es.close(); es = null; S = null; roomCode = null; store.set('uno_room', null);
+  if (es) es.close(); es = null; S = null; roomCode = null; prevLog = null; store.set('uno_room', null);
   document.title = 'Uno Night';
   $('#over').classList.remove('on'); $('#chat').classList.remove('on'); chatOpen = false;
   history.replaceState(null, '', location.pathname);
@@ -334,6 +435,7 @@ function pickColor(cb) {
 // ---- render ----
 function render() {
   if (!S) return;
+  maybeAnnounceUno();
   if (S.phase === 'lobby') { show('lobby'); renderLobby(); $('#over').classList.remove('on'); }
   else { show('game'); renderGame(); }
   renderChat(true);
@@ -345,6 +447,7 @@ function renderLobby() {
   const list = $('#lplayers'); list.replaceChildren();
   for (const p of S.players) {
     list.append(h('div', { class: 'pitem' + (p.connected ? '' : ' off') },
+      avatarNode(p.avatar),
       h('span', { class: 'nm', text: p.name + (p.id === S.you ? ' (you)' : '') }),
       p.id === S.host ? h('span', { class: 'tag', text: 'HOST' }) : null,
       isHost && p.id !== S.you ? h('button', { class: 'x', title: 'Remove', text: '✕', onclick: () => act('kick', { target: p.id }) }) : null));
@@ -381,7 +484,8 @@ function renderGame() {
     const backs = h('div', { class: 'oc' }, h('span', {}, ...Array.from({ length: Math.min(p.count, 6) }, () => h('div', { class: 'card back mini' }))), h('b', { text: p.count }));
     backs.firstChild.style.display = 'flex';
     opps.append(h('div', { class: 'opp' + (p.id === S.turn ? ' turn' : '') + (p.connected ? '' : ' off') },
-      h('div', { class: 'on', text: p.name }), backs,
+      h('div', { class: 'oh' }, avatarNode(p.avatar, 'sm'), h('div', { class: 'on', text: p.name })),
+      backs,
       p.wins ? h('div', { class: 'ow', text: '🏆 ' + p.wins }) : null,
       S.host === S.you && !p.connected ? h('button', { class: 'x', text: '✕', title: 'Remove', onclick: () => act('kick', { target: p.id }) }) : null));
   }
@@ -414,6 +518,9 @@ function renderGame() {
   hand.classList.toggle('mine', myTurn);
   hand.replaceChildren();
   const sorted = [...S.hand].sort((a, b) => CO[a.c] - CO[b.c] || vo(a.v) - vo(b.v));
+  const ol = sorted.length <= 6 ? -0.32 : sorted.length <= 10 ? -0.22 : sorted.length <= 14 ? -0.14 : -0.06;
+  hand.style.setProperty('--ol', ol);
+  hand.style.justifyContent = sorted.length <= 5 ? 'safe center' : 'flex-start';
   for (const c of sorted) {
     const ok = S.playable.includes(c.id);
     const cls = myTurn ? (ok ? 'ok' : 'no') : '';
@@ -425,7 +532,12 @@ function renderGame() {
   }
   hand.scrollLeft = sl;
   const meP = S.players[me];
-  $('#hl').textContent = `${meP ? meP.name : 'You'} · ${S.hand.length} card${S.hand.length === 1 ? '' : 's'}` + (meP && meP.wins ? ` · 🏆 ${meP.wins}` : '');
+  const hl = $('#hl');
+  hl.className = 'hlrow';
+  hl.replaceChildren(
+    avatarNode(meP ? meP.avatar : myAvatar, 'sm'),
+    h('span', { text: `${meP ? meP.name : 'You'} · ${S.hand.length} card${S.hand.length === 1 ? '' : 's'}` + (meP && meP.wins ? ` · 🏆 ${meP.wins}` : '') })
+  );
 
   // your-turn nudge
   if (myTurn && prevTurn !== S.you) { if (navigator.vibrate) navigator.vibrate(60); }
@@ -438,7 +550,9 @@ function renderGame() {
     const w = S.players.find((p) => p.id === S.winner);
     $('#owin').textContent = w ? (w.id === S.you ? 'You win! 🏆' : `${w.name} wins!`) : 'Round over';
     $('#oscores').replaceChildren(...[...S.players].sort((a, b) => b.wins - a.wins).map((p) =>
-      h('div', { class: 'score' }, h('span', { text: p.name + (p.id === S.you ? ' (you)' : '') }), h('b', { text: '🏆 ' + p.wins }))));
+      h('div', { class: 'score' },
+        h('div', { class: 'sl' }, avatarNode(p.avatar, 'sm'), h('span', { text: p.name + (p.id === S.you ? ' (you)' : '') })),
+        h('b', { text: '🏆 ' + p.wins }))));
     const isHost = S.host === S.you;
     $('#again').style.display = isHost ? '' : 'none';
     $('#owait').style.display = isHost ? 'none' : '';
@@ -464,7 +578,7 @@ function renderChat(fromState) {
 (async () => {
   const saved = store.get('uno_room');
   if (saved && (!urlRoom || urlRoom === saved) && store.get('uno_name')) {
-    const r = await api('/api/join', { pid, name: store.get('uno_name'), room: saved });
+    const r = await api('/api/join', { pid, name: store.get('uno_name'), room: saved, avatar: myAvatar });
     if (r.ok) connect(r.room); else store.set('uno_room', null);
   }
 })();
