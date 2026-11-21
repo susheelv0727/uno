@@ -7,73 +7,62 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-const PORT = Number(process.env.PORT) || 3000;
-const MAX_PLAYERS = 10;
+const PORT = process.env.PORT || 3000;
+const ROOM_TTL_MS = 4 * 60 * 60 * 1000;
 const DISCONNECT_GRACE_MS = 15000;
-const ROOM_TTL_MS = 60 * 60 * 1000;
+const MAX_PLAYERS = 10;
+const TURN_MS = 10000;
+const COLORS = ['r', 'y', 'g', 'b'];
+const COLOR_NAMES = { r: 'red', y: 'yellow', g: 'green', b: 'blue' };
 
 const rooms = new Map();
-const COLORS = ['r', 'y', 'g', 'b'];
+const uid = () => crypto.randomBytes(9).toString('base64url');
 const rint = (n) => crypto.randomInt(n);
+const code = () => { let s = ''; for (let i = 0; i < 4; i++) s += 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'[rint(32)]; return s; };
 
 function shuffle(a) {
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = rint(i + 1);
-    [a[i], a[j]] = [a[j], a[i]];
-  }
+  for (let i = a.length - 1; i > 0; i--) { const j = rint(i + 1); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
 }
 
-function makeDeck(copies) {
-  const deck = [];
-  let id = 0;
-  const add = (c, v) => deck.push({ id: id++, c, v });
-  for (let k = 0; k < copies; k++) {
+function makeDeck(packs = 1) {
+  const d = [];
+  for (let n = 0; n < packs; n++) {
     for (const c of COLORS) {
-      add(c, '0');
-      for (let i = 1; i <= 9; i++) { add(c, String(i)); add(c, String(i)); }
-      for (const v of ['skip', 'rev', 'd2']) { add(c, v); add(c, v); }
+      d.push({ c, v: '0', id: uid() });
+      for (let k = 0; k < 2; k++) {
+        for (let i = 1; i <= 9; i++) d.push({ c, v: String(i), id: uid() });
+        for (const v of ['skip', 'rev', 'd2']) d.push({ c, v, id: uid() });
+      }
     }
-    for (let i = 0; i < 4; i++) { add('w', 'wild'); add('w', 'd4'); }
+    for (let k = 0; k < 4; k++) { d.push({ c: 'w', v: 'wild', id: uid() }); d.push({ c: 'w', v: 'd4', id: uid() }); }
   }
-  return deck;
-}
-
-function genCode() {
-  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-  for (;;) {
-    let c = '';
-    for (let i = 0; i < 4; i++) c += letters[rint(letters.length)];
-    if (!rooms.has(c)) return c;
-  }
+  return d;
 }
 
 function newRoom() {
+  let c; do { c = code(); } while (rooms.has(c));
   const room = {
-    code: genCode(),
-    players: [],
-    hostId: null,
-    phase: 'lobby', // lobby | playing | over
-    opts: { stack: true },
-    deck: [], discard: [],
-    color: null, turn: 0, dir: 1,
-    pending: 0, pendingType: null,
-    drawn: null, // id of card just drawn (may be played or passed)
-    winner: null, vuln: null,
-    log: [],
-    clients: new Map(), // pid -> Set(res)
-    lastActive: Date.now(),
+    code: c, phase: 'lobby', hostId: null, opts: { stack: true },
+    players: [], deck: [], discard: [],
+    turn: 0, dir: 1, pending: 0, pendingType: null, drawn: null,
+    winner: null, vuln: null, color: null, log: [],
+    clients: new Map(), lastActive: Date.now(),
+    turnDeadline: null, turnTimer: null,
   };
-  rooms.set(room.code, room);
+  rooms.set(c, room);
   return room;
 }
 
-function addLog(room, text) { room.log.push({ k: 'sys', text }); if (room.log.length > 200) room.log.shift(); }
-function addChat(room, who, text) { room.log.push({ k: 'chat', who, text }); if (room.log.length > 200) room.log.shift(); }
+const topCard = (room) => room.discard[room.discard.length - 1];
 
-// ---------- game logic ----------
+function addLog(room, text) { room.log.push({ t: 'sys', text }); if (room.log.length > 80) room.log.shift(); }
+function addChat(room, from, text) { room.log.push({ t: 'chat', from, text }); if (room.log.length > 80) room.log.shift(); }
 
-function topCard(room) { return room.discard[room.discard.length - 1]; }
+function clearTurnTimer(room) {
+  if (room.turnTimer) { clearTimeout(room.turnTimer); room.turnTimer = null; }
+  room.turnDeadline = null;
+}
 
 function canPlay(room, card) {
   if (room.pending > 0) return room.opts.stack && card.v === room.pendingType;
@@ -97,7 +86,6 @@ function drawCards(room, p, n) {
   p.said = false;
 }
 
-// Move `steps` connected seats in the current direction.
 function step(room, from, steps) {
   const n = room.players.length;
   let i = from, moved = 0, guard = 0;
@@ -110,7 +98,6 @@ function step(room, from, steps) {
 
 const connectedCount = (room) => room.players.filter((p) => p.connected).length;
 
-// If the player whose turn it is has dropped, make them auto-draw and move on.
 function settleTurn(room) {
   if (room.phase !== 'playing') return;
   for (let g = 0; g < 20; g++) {
@@ -126,6 +113,13 @@ function settleTurn(room) {
     }
     room.turn = step(room, room.turn, 1);
   }
+}
+
+function syncTurnTimer(room) {
+  clearTurnTimer(room);
+  if (room.phase !== 'playing') return;
+  room.turnDeadline = Date.now() + TURN_MS;
+  room.turnTimer = setTimeout(() => autoTurn(room), TURN_MS + 50);
 }
 
 function startRound(room) {
@@ -145,6 +139,7 @@ function startRound(room) {
   room.turn = rint(n);
   room.phase = 'playing';
   addLog(room, `New round! ${room.players[room.turn].name} goes first.`);
+  syncTurnTimer(room);
 }
 
 function removePlayer(room, pid) {
@@ -156,7 +151,7 @@ function removePlayer(room, pid) {
     for (const r of set) { try { r.write('event: removed\ndata: {}\n\n'); r.end(); } catch (e) { /* ignore */ } }
     room.clients.delete(pid);
   }
-  if (!room.players.length) { rooms.delete(room.code); return; }
+  if (!room.players.length) { clearTurnTimer(room); rooms.delete(room.code); return; }
   if (room.hostId === pid) room.hostId = (room.players.find((x) => x.connected) || room.players[0]).id;
   if (room.vuln === pid) room.vuln = null;
   if (room.phase !== 'playing') return;
@@ -165,6 +160,7 @@ function removePlayer(room, pid) {
   if (n < 2) {
     const w = room.players[0];
     room.phase = 'over'; room.winner = w.id; w.wins++;
+    clearTurnTimer(room);
     addLog(room, `${w.name} wins — everyone else left`);
     return;
   }
@@ -174,6 +170,138 @@ function removePlayer(room, pid) {
     room.turn = room.dir === 1 ? idx % n : (idx - 1 + n) % n;
   }
   settleTurn(room);
+}
+
+function pickAutoColor(room, p) {
+  const counts = { r: 0, y: 0, g: 0, b: 0 };
+  for (const c of p.hand) if (counts[c.c] != null) counts[c.c]++;
+  let best = 'r', bestN = -1;
+  for (const c of COLORS) if (counts[c] > bestN) { best = c; bestN = counts[c]; }
+  return best;
+}
+
+function chooseAutoPlayCard(room, cards) {
+  const top = topCard(room);
+  const nonWild = cards.filter((c) => c.c !== 'w');
+  const pool = nonWild.length ? nonWild : cards;
+  const colorMatch = pool.filter((c) => c.c === room.color);
+  if (colorMatch.length) return colorMatch[rint(colorMatch.length)];
+  const valueMatch = pool.filter((c) => c.v === top.v);
+  if (valueMatch.length) return valueMatch[rint(valueMatch.length)];
+  return pool[rint(pool.length)];
+}
+
+function applyPlay(room, p, card, colorChoice) {
+  p.hand = p.hand.filter((c) => c.id !== card.id);
+  room.discard.push(card);
+  room.color = card.c === 'w' ? colorChoice : card.c;
+  room.drawn = null;
+  room.vuln = null;
+
+  if (p.hand.length === 0) {
+    room.phase = 'over'; room.winner = p.id; p.wins++;
+    addLog(room, `${p.name} played their last card and wins the round!`);
+    clearTurnTimer(room);
+    return;
+  }
+  if (p.hand.length === 1) {
+    if (p.said) addLog(room, `${p.name}: UNO!`);
+    else room.vuln = p.id;
+  }
+  p.said = false;
+
+  const nxtIdx = step(room, room.turn, 1);
+  const nxt = room.players[nxtIdx];
+  switch (card.v) {
+    case 'skip':
+      addLog(room, `${p.name} skipped ${nxt.name}`);
+      room.turn = step(room, room.turn, 2);
+      break;
+    case 'rev':
+      room.dir *= -1;
+      addLog(room, `${p.name} reversed direction`);
+      room.turn = step(room, room.turn, connectedCount(room) === 2 ? 2 : 1);
+      break;
+    case 'd2':
+    case 'd4': {
+      const amt = card.v === 'd2' ? 2 : 4;
+      if (card.v === 'd4') addLog(room, `${p.name} played +4 and chose ${COLOR_NAMES[room.color]}`);
+      if (room.opts.stack) {
+        room.pending += amt; room.pendingType = card.v;
+        room.turn = nxtIdx;
+        addLog(room, `${p.name} played +${amt} (stack: ${room.pending})`);
+      } else {
+        drawCards(room, nxt, amt);
+        addLog(room, `${p.name} made ${nxt.name} draw ${amt}`);
+        room.turn = step(room, room.turn, 2);
+      }
+      break;
+    }
+    case 'wild':
+      addLog(room, `${p.name} chose ${COLOR_NAMES[room.color]}`);
+      room.turn = nxtIdx;
+      break;
+    default:
+      room.turn = nxtIdx;
+  }
+}
+
+function autoPlay(room, p, card) {
+  const color = card.c === 'w' ? pickAutoColor(room, p) : card.c;
+  if (p.hand.length === 2) p.said = true; // auto-call UNO when going to 1
+  addLog(room, `${p.name} ran out of time and played a card`);
+  applyPlay(room, p, card, color);
+}
+
+function autoTurn(room) {
+  room.turnTimer = null;
+  if (room.phase !== 'playing') { room.turnDeadline = null; return; }
+  const p = room.players[room.turn];
+  if (!p) { clearTurnTimer(room); return; }
+  if (!p.connected) {
+    settleTurn(room);
+    syncTurnTimer(room);
+    broadcast(room);
+    return;
+  }
+
+  if (room.drawn !== null) {
+    const c = p.hand.find((x) => x.id === room.drawn);
+    if (c && canPlay(room, c)) autoPlay(room, p, c);
+    else {
+      room.drawn = null; room.vuln = null;
+      addLog(room, `${p.name} ran out of time and passed`);
+      room.turn = step(room, room.turn, 1);
+    }
+  } else if (room.pending > 0) {
+    const stackables = room.opts.stack ? p.hand.filter((c) => c.v === room.pendingType) : [];
+    if (stackables.length) autoPlay(room, p, chooseAutoPlayCard(room, stackables));
+    else {
+      const n = room.pending;
+      drawCards(room, p, n);
+      room.pending = 0; room.pendingType = null;
+      addLog(room, `${p.name} ran out of time and drew ${n} cards`);
+      room.turn = step(room, room.turn, 1);
+    }
+  } else {
+    const playable = p.hand.filter((c) => canPlay(room, c));
+    if (playable.length) autoPlay(room, p, chooseAutoPlayCard(room, playable));
+    else {
+      drawCards(room, p, 1);
+      const c = p.hand[p.hand.length - 1];
+      addLog(room, `${p.name} ran out of time and drew a card`);
+      if (c && canPlay(room, c)) autoPlay(room, p, c);
+      else room.turn = step(room, room.turn, 1);
+    }
+  }
+
+  if (room.phase === 'playing') {
+    settleTurn(room);
+    syncTurnTimer(room);
+  } else {
+    clearTurnTimer(room);
+  }
+  broadcast(room);
 }
 
 function handleAct(room, p, b) {
@@ -203,59 +331,7 @@ function handleAct(room, p, b) {
       if (room.drawn !== null && card.id !== room.drawn) return 'You can only play the card you drew';
       if (!canPlay(room, card)) return "That card can't be played now";
       if (card.c === 'w' && !COLORS.includes(b.color)) return 'Pick a color';
-
-      p.hand = p.hand.filter((c) => c.id !== card.id);
-      room.discard.push(card);
-      room.color = card.c === 'w' ? b.color : card.c;
-      room.drawn = null;
-      room.vuln = null;
-      const names = { r: 'red', y: 'yellow', g: 'green', b: 'blue' };
-
-      if (p.hand.length === 0) {
-        room.phase = 'over'; room.winner = p.id; p.wins++;
-        addLog(room, `${p.name} played their last card and wins the round!`);
-        return null;
-      }
-      if (p.hand.length === 1) {
-        if (p.said) addLog(room, `${p.name}: UNO!`);
-        else room.vuln = p.id;
-      }
-      p.said = false;
-
-      const nxtIdx = step(room, room.turn, 1);
-      const nxt = room.players[nxtIdx];
-      switch (card.v) {
-        case 'skip':
-          addLog(room, `${p.name} skipped ${nxt.name}`);
-          room.turn = step(room, room.turn, 2);
-          break;
-        case 'rev':
-          room.dir *= -1;
-          addLog(room, `${p.name} reversed direction`);
-          room.turn = step(room, room.turn, connectedCount(room) === 2 ? 2 : 1);
-          break;
-        case 'd2':
-        case 'd4': {
-          const amt = card.v === 'd2' ? 2 : 4;
-          if (card.v === 'd4') addLog(room, `${p.name} played +4 and chose ${names[room.color]}`);
-          if (room.opts.stack) {
-            room.pending += amt; room.pendingType = card.v;
-            room.turn = nxtIdx;
-            addLog(room, `${p.name} played +${amt} (stack: ${room.pending})`);
-          } else {
-            drawCards(room, nxt, amt);
-            addLog(room, `${p.name} made ${nxt.name} draw ${amt}`);
-            room.turn = step(room, room.turn, 2);
-          }
-          break;
-        }
-        case 'wild':
-          addLog(room, `${p.name} chose ${names[room.color]}`);
-          room.turn = nxtIdx;
-          break;
-        default:
-          room.turn = nxtIdx;
-      }
+      applyPlay(room, p, card, b.color);
       return null;
     }
     case 'draw': {
@@ -346,6 +422,7 @@ function view(room, pid) {
     pending: room.pending, pendingType: room.pendingType, drawn: room.drawn,
     deck: room.deck.length, winner: room.winner, vuln: room.vuln,
     saidUno: me ? !!me.said : false, playable,
+    turnDeadline: room.turnDeadline, turnDuration: TURN_MS,
     log: room.log.slice(-60),
   };
 }
@@ -375,6 +452,7 @@ function onDisconnect(room, pid) {
         if (other) room.hostId = other.id;
       }
       settleTurn(room);
+      syncTurnTimer(room);
     }
     if (rooms.has(room.code)) broadcast(room);
   }, DISCONNECT_GRACE_MS);
@@ -429,7 +507,6 @@ async function apiJoin(req, res) {
     room.players.push(p);
     if (!room.hostId) room.hostId = p.id;
     addLog(room, `${name} joined`);
-    // Drop them again if they never open the live connection.
     setTimeout(() => {
       const q = rooms.has(room.code) && room.players.find((x) => x.id === p.id);
       if (q && !q.connected && room.phase !== 'playing') { removePlayer(room, p.id); if (rooms.has(room.code)) broadcast(room); }
@@ -447,7 +524,10 @@ async function apiAct(req, res) {
   if (!p) return json(res, 404, { ok: false, error: 'You are not in this room' });
   const err = handleAct(room, p, b);
   if (err) return json(res, 200, { ok: false, error: err });
-  if (rooms.has(room.code)) broadcast(room);
+  if (rooms.has(room.code)) {
+    if (['start', 'play', 'draw', 'pass', 'kick', 'leave'].includes(b.type)) syncTurnTimer(room);
+    broadcast(room);
+  }
   json(res, 200, { ok: true });
 }
 
@@ -498,18 +578,16 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-// keep SSE connections alive through proxies
 setInterval(() => {
   for (const room of rooms.values())
     for (const set of room.clients.values())
       for (const res of set) { try { res.write(': ping\n\n'); } catch (e) { /* ignore */ } }
 }, 15000);
 
-// delete abandoned rooms
 setInterval(() => {
   const now = Date.now();
   for (const [code, room] of rooms)
-    if (room.clients.size === 0 && now - room.lastActive > ROOM_TTL_MS) rooms.delete(code);
+    if (room.clients.size === 0 && now - room.lastActive > ROOM_TTL_MS) { clearTurnTimer(room); rooms.delete(code); }
 }, 60000);
 
 server.listen(PORT, '0.0.0.0', () => console.log(`Uno Night running on http://localhost:${PORT}`));

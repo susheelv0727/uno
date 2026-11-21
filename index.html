@@ -45,6 +45,12 @@ h1 span{color:var(--y)}
 .avimg{object-fit:cover}
 .av.sm,.avimg.sm{width:24px;height:24px;font-size:14px}
 .av.lg,.avimg.lg{width:48px;height:48px;font-size:28px}
+.tring{--p:1;--tcol:#fdd835;width:40px;height:40px;border-radius:50%;padding:3px;display:inline-flex;align-items:center;justify-content:center;flex:none;background:rgba(255,255,255,.12)}
+.tring.on{background:conic-gradient(var(--tcol) calc(var(--p)*1turn), rgba(255,255,255,.18) 0);box-shadow:0 0 10px rgba(253,216,53,.35)}
+.tring.sm{width:30px;height:30px;padding:3px}
+.tring .av,.tring .avimg{width:100%;height:100%;font-size:18px;background:#16342a}
+.tring.sm .av,.tring.sm .avimg{font-size:13px}
+.tring.on .av,.tring.on .avimg{background:#143028}
 .avbtn{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.12);font-size:28px;display:flex;align-items:center;justify-content:center;padding:0;box-shadow:none}
 .avbtn span,.avbtn img{width:100%;height:100%;border-radius:14px;display:flex;align-items:center;justify-content:center;object-fit:cover}
 .avpanel{padding:10px}
@@ -127,15 +133,15 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
   animation:none;
 }
 @keyframes buzzPulse{50%{transform:scale(1.04);box-shadow:0 10px 0 #3b0000, 0 18px 28px rgba(229,57,53,.35), 0 16px 22px rgba(0,0,0,.45), inset 0 6px 12px rgba(255,255,255,.35), inset 0 -8px 14px rgba(0,0,0,.2)}}
-#hand{display:flex;justify-content:flex-start;overflow-x:auto;overflow-y:visible;padding:26px 14px 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+#hand{display:flex;justify-content:flex-start;overflow-x:auto;overflow-y:visible;padding:30px 14px 28px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 #hand::-webkit-scrollbar{display:none}
-#hand .card{margin-left:calc(var(--cw)*var(--ol, -0.32));transition:transform .12s, box-shadow .12s, filter .12s;cursor:default}
+#hand .card{--rot:0deg;--ty:0px;--lift:0px;--sc:1;margin-left:calc(var(--cw)*var(--ol, -0.32));transition:transform .14s ease, box-shadow .12s, filter .12s;cursor:default;transform:translateY(calc(var(--ty) + var(--lift))) rotate(var(--rot)) scale(var(--sc));transform-origin:bottom center}
 #hand .card:first-child{margin-left:0}
-#hand .card:hover{transform:translateY(-14px) scale(1.04);z-index:5;filter:brightness(1.05)}
-#hand .card.ok{transform:translateY(-16px);box-shadow:0 0 0 3px #fff,0 0 14px 3px rgba(255,255,255,.7);cursor:pointer;z-index:2}
-#hand .card.ok:hover{transform:translateY(-22px) scale(1.05);z-index:6}
+#hand .card:hover{--lift:-14px;--sc:1.04;z-index:5;filter:brightness(1.05)}
+#hand .card.ok{--lift:-18px;box-shadow:0 0 0 3px #fff,0 0 14px 3px rgba(255,255,255,.7);cursor:pointer;z-index:2}
+#hand .card.ok:hover{--lift:-24px;--sc:1.05;z-index:6}
 #hand .card.no{filter:brightness(.55)}
-#hand .card.no:hover{transform:translateY(-8px);filter:brightness(.7);z-index:4}
+#hand .card.no:hover{--lift:-8px;filter:brightness(.7);z-index:4}
 #hand.mine{background:linear-gradient(transparent,rgba(253,216,53,.14))}
 .hl{text-align:center;font-size:12px;opacity:.7;margin-top:-4px;padding-bottom:6px}
 .hlrow{display:flex;align-items:center;justify-content:center;gap:8px;font-size:12px;opacity:.9;margin-top:-4px;padding-bottom:6px}
@@ -214,6 +220,7 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
     <div class="chip" id="tcode"></div>
     <div class="chip" id="tdeck"></div>
     <div class="sp"></div>
+    <button class="ib" id="musicbtn" title="Music">🔊</button>
     <button class="ib" id="chatbtn" title="Chat">💬<span class="badge" id="badge" style="display:none"></span></button>
     <button class="ib" id="gleave" title="Leave">✕</button>
   </div>
@@ -298,7 +305,7 @@ function setAvatar(av) {
 function renderAvatarPicker() {
   const g = $('#avgrid'); if (!g) return;
   g.replaceChildren(...AV_PRESETS.map((a) => h('button', {
-    class: 'avopt' + (a === myAvatar ? ' on' : ''), type: 'button', text: a, 'data-av': a,
+    class: 'avopt'+ (a === myAvatar ? ' on' : ''), type: 'button', text: a, 'data-av': a,
     onclick: () => setAvatar(a),
   })));
 }
@@ -328,7 +335,71 @@ $('#name').value = store.get('uno_name') || '';
 const urlRoom = (new URLSearchParams(location.search).get('room') || '').toUpperCase();
 if (urlRoom) $('#code').value = urlRoom;
 
-let S = null, es = null, roomCode = null, prevTurn = null, seenLog = 0, chatOpen = false, prevLog = null;
+let S = null, es = null, roomCode = null, prevTurn = null, seenLog = 0, chatOpen = false, prevLog = null, prevPhase = null;
+let musicOn = store.get('uno_music') !== '0';
+let audioCtx = null, musicMaster = null, musicInterval = null;
+
+function ensureAudio() {
+  try {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    return audioCtx;
+  } catch (e) { return null; }
+}
+function stopMusic() {
+  if (musicInterval) { clearInterval(musicInterval); musicInterval = null; }
+  if (musicMaster) { try { musicMaster.disconnect(); } catch (e) {} musicMaster = null; }
+}
+function startMusic() {
+  if (!musicOn || musicInterval) return;
+  const ctx = ensureAudio(); if (!ctx) return;
+  try {
+    musicMaster = ctx.createGain();
+    musicMaster.gain.value = 0.045;
+    musicMaster.connect(ctx.destination);
+    const seq = [261.63, 329.63, 392.0, 523.25, 392.0, 329.63, 293.66, 349.23, 440.0, 587.33, 440.0, 349.23];
+    let i = 0;
+    musicInterval = setInterval(() => {
+      if (!musicMaster || !audioCtx) return;
+      const t = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(seq[i % seq.length], t);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.12, t + 0.03);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+      o.connect(g); g.connect(musicMaster);
+      o.start(t); o.stop(t + 0.45);
+      if (i % 4 === 0) {
+        const b = audioCtx.createOscillator();
+        const bg = audioCtx.createGain();
+        b.type = 'sine';
+        b.frequency.setValueAtTime(seq[i % seq.length] / 2, t);
+        bg.gain.setValueAtTime(0.0001, t);
+        bg.gain.exponentialRampToValueAtTime(0.08, t + 0.04);
+        bg.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+        b.connect(bg); bg.connect(musicMaster);
+        b.start(t); b.stop(t + 0.95);
+      }
+      i++;
+    }, 480);
+  } catch (e) {}
+}
+function updateMusicBtn() {
+  const b = $('#musicbtn');
+  if (b) b.textContent = musicOn ? '🔊' : '🔇';
+}
+$('#musicbtn').onclick = () => {
+  musicOn = !musicOn;
+  store.set('uno_music', musicOn ? '1' : '0');
+  updateMusicBtn();
+  if (musicOn) { if (S && S.phase === 'playing') startMusic(); }
+  else stopMusic();
+};
+updateMusicBtn();
 
 function speakUno(text) {
   try {
@@ -399,7 +470,8 @@ function connect(code) {
   };
 }
 function goHome(msg) {
-  if (es) es.close(); es = null; S = null; roomCode = null; prevLog = null; store.set('uno_room', null);
+  stopMusic();
+  if (es) es.close(); es = null; S = null; roomCode = null; prevLog = null; prevPhase = null; store.set('uno_room', null);
   document.title = 'Uno Night';
   $('#over').classList.remove('on'); $('#chat').classList.remove('on'); chatOpen = false;
   history.replaceState(null, '', location.pathname);
@@ -439,158 +511,38 @@ function cardEl(c, cls = '', onclick) {
   if (onclick) e.addEventListener('click', onclick);
   return e;
 }
-const CO = { r: 0, y: 1, g: 2, b: 3, w: 4 };
-const vo = (v) => (/^\d$/.test(v) ? +v : { skip: 10, rev: 11, d2: 12, wild: 13, d4: 14 }[v]);
 
-function pickColor(cb) {
-  const m = $('#picker'); m.classList.add('on');
-  m.onclick = (e) => {
-    const b = e.target.closest('button');
-    if (!b) { if (e.target === m) m.classList.remove('on'); return; }
-    m.classList.remove('on'); cb(b.dataset.c);
-  };
+function avatarNode(av, cls) {
+  const c = cls ? ' ' + cls : '';
+  if (typeof av === 'string' && av.startsWith('data:image/')) return h('img', { class: 'avimg' + c, src: av, alt: '' });
+  return h('div', { class: 'av' + c, text: av || '🙂' });
 }
 
-// ---- render ----
-function render() {
-  if (!S) return;
-  maybeAnnounceUno();
-  if (S.phase === 'lobby') { show('lobby'); renderLobby(); $('#over').classList.remove('on'); }
-  else { show('game'); renderGame(); }
-  renderChat(true);
+function avatarTimerNode(av, cls, active) {
+  const ring = h('div', { class: 'tring' + (cls ? ' ' + cls : '') + (active ? ' on' : '') }, avatarNode(av, ''));
+  if (active) ring.dataset.timer = 'on';
+  return ring;
 }
 
-function renderLobby() {
-  const isHost = S.host === S.you;
-  $('#lcode').textContent = S.code;
-  const list = $('#lplayers'); list.replaceChildren();
-  for (const p of S.players) {
-    list.append(h('div', { class: 'pitem' + (p.connected ? '' : ' off') },
-      avatarNode(p.avatar),
-      h('span', { class: 'nm', text: p.name + (p.id === S.you ? ' (you)' : '') }),
-      p.id === S.host ? h('span', { class: 'tag', text: 'HOST' }) : null,
-      isHost && p.id !== S.you ? h('button', { class: 'x', title: 'Remove', text: '✕', onclick: () => act('kick', { target: p.id }) }) : null));
-  }
-  $('#stack').checked = S.opts.stack; $('#stack').disabled = !isHost;
-  $('#start').style.display = isHost ? '' : 'none';
-  $('#start').disabled = S.players.filter((p) => p.connected).length < 2;
-  $('#start').textContent = S.players.length < 2 ? 'Waiting for players…' : 'Start game';
-  $('#wait').style.display = isHost ? 'none' : '';
-}
-
-function statusText() {
-  if (S.phase !== 'playing') return '';
-  const cur = S.players.find((p) => p.id === S.turn);
-  if (S.turn === S.you) {
-    if (S.drawn !== null) return 'Play the card you drew, or pass';
-    if (S.pending > 0) return S.playable.length ? `Stack a +${S.pendingType === 'd2' ? 2 : 4} or draw ${S.pending}` : `Draw ${S.pending} cards`;
-    return S.playable.length ? 'Your turn!' : 'No match — draw a card';
-  }
-  return `${cur ? cur.name : '…'}'s turn` + (S.pending > 0 ? ` (stack or draw ${S.pending})` : '');
-}
-
-function renderGame() {
-  const myTurn = S.phase === 'playing' && S.turn === S.you;
-  $('#tcode').textContent = 'Room ' + S.code;
-  $('#tdeck').textContent = 'Deck ' + S.deck;
-  $('#dirx').textContent = S.dir === 1 ? '↻' : '↺';
-
-  // opponents, seated relative to me
-  const me = S.players.findIndex((p) => p.id === S.you), n = S.players.length;
-  const opps = $('#opps'); opps.replaceChildren();
-  for (let i = 1; i < n; i++) {
-    const p = S.players[(me + i) % n];
-    const backs = h('div', { class: 'oc' }, h('span', {}, ...Array.from({ length: Math.min(p.count, 6) }, () => h('div', { class: 'card back mini' }))), h('b', { text: p.count }));
-    backs.firstChild.style.display = 'flex';
-    opps.append(h('div', { class: 'opp' + (p.id === S.turn ? ' turn' : '') + (p.connected ? '' : ' off') },
-      h('div', { class: 'oh' }, avatarNode(p.avatar, 'sm'), h('div', { class: 'on', text: p.name })),
-      backs,
-      p.wins ? h('div', { class: 'ow', text: '🏆 ' + p.wins }) : null,
-      S.host === S.you && !p.connected ? h('button', { class: 'x', text: '✕', title: 'Remove', onclick: () => act('kick', { target: p.id }) }) : null));
-  }
-
-  // table
-  $('#discard').replaceChildren(S.top ? cardEl(S.top, 'big') : '');
-  $('#ring').style.setProperty('--rc', COLOR_VAR[S.color] || '#555');
-  $('#colname').textContent = S.color ? COLOR_NAME[S.color] : '';
-  const canDraw = myTurn && S.drawn === null;
-  const dp = $('#drawpile'); dp.classList.toggle('can', canDraw && S.playable.length === 0);
-  dp.onclick = () => canDraw && act('draw');
-  const st = $('#status'); st.textContent = statusText(); st.classList.toggle('me', myTurn);
-  $('#log3').replaceChildren(...S.log.slice(-3).map((l) => h('div', { text: l.k === 'chat' ? `${l.who}: ${l.text}` : l.text })));
-
-  // actions
-  const acts = $('#actions'); acts.replaceChildren();
-  if (S.phase === 'playing') {
-    if ((myTurn && S.hand.length <= 2 && !S.saidUno) || S.vuln === S.you)
-      acts.append(h('button', { class: 'btn uno', text: 'UNO!', onclick: () => act('uno') }));
-    if (S.vuln && S.vuln !== S.you) {
-      const v = S.players.find((p) => p.id === S.vuln);
-      acts.append(h('button', { class: 'btn primary', text: `Catch ${v ? v.name : ''}!`, onclick: () => act('catch') }));
+let timerRAF = null;
+function tickTimer() {
+  if (timerRAF) { cancelAnimationFrame(timerRAF); timerRAF = null; }
+  const run = () => {
+    if (!S || S.phase !== 'playing' || !S.turnDeadline) {
+      document.querySelectorAll('[data-timer="on"]').forEach((el) => { el.style.setProperty('--p', '1'); el.style.setProperty('--tcol', '#fdd835'); });
+      timerRAF = null;
+      return;
     }
-    if (myTurn && S.drawn !== null) acts.append(h('button', { class: 'btn', text: 'Pass', onclick: () => act('pass') }));
-    if (myTurn && S.saidUno) acts.append(h('span', { class: 'tag', text: 'UNO ✓' }));
-  }
-
-  // hand
-  const hand = $('#hand'); const sl = hand.scrollLeft;
-  hand.classList.toggle('mine', myTurn);
-  hand.replaceChildren();
-  const sorted = [...S.hand].sort((a, b) => CO[a.c] - CO[b.c] || vo(a.v) - vo(b.v));
-  const ol = sorted.length <= 6 ? -0.32 : sorted.length <= 10 ? -0.22 : sorted.length <= 14 ? -0.14 : -0.06;
-  hand.style.setProperty('--ol', ol);
-  hand.style.justifyContent = sorted.length <= 5 ? 'safe center' : 'flex-start';
-  for (const c of sorted) {
-    const ok = S.playable.includes(c.id);
-    const cls = myTurn ? (ok ? 'ok' : 'no') : '';
-    hand.append(cardEl(c, cls, () => {
-      if (!ok) return;
-      if (c.c === 'w') pickColor((col) => act('play', { cardId: c.id, color: col }));
-      else act('play', { cardId: c.id });
-    }));
-  }
-  hand.scrollLeft = sl;
-  const meP = S.players[me];
-  const hl = $('#hl');
-  hl.className = 'hlrow';
-  hl.replaceChildren(
-    avatarNode(meP ? meP.avatar : myAvatar, 'sm'),
-    h('span', { text: `${meP ? meP.name : 'You'} · ${S.hand.length} card${S.hand.length === 1 ? '' : 's'}` + (meP && meP.wins ? ` · 🏆 ${meP.wins}` : '') })
-  );
-
-  // your-turn nudge
-  if (myTurn && prevTurn !== S.you) { if (navigator.vibrate) navigator.vibrate(60); }
-  prevTurn = S.turn;
-  document.title = myTurn ? '▶ Your turn — Uno Night' : 'Uno Night';
-
-  // round over
-  const over = $('#over');
-  if (S.phase === 'over') {
-    const w = S.players.find((p) => p.id === S.winner);
-    $('#owin').textContent = w ? (w.id === S.you ? 'You win! 🏆' : `${w.name} wins!`) : 'Round over';
-    $('#oscores').replaceChildren(...[...S.players].sort((a, b) => b.wins - a.wins).map((p) =>
-      h('div', { class: 'score' },
-        h('div', { class: 'sl' }, avatarNode(p.avatar, 'sm'), h('span', { text: p.name + (p.id === S.you ? ' (you)' : '') })),
-        h('b', { text: '🏆 ' + p.wins }))));
-    const isHost = S.host === S.you;
-    $('#again').style.display = isHost ? '' : 'none';
-    $('#owait').style.display = isHost ? 'none' : '';
-    over.classList.add('on');
-  } else over.classList.remove('on');
-}
-
-function renderChat(fromState) {
-  if (!S) return;
-  const unread = S.log.length - seenLog;
-  const badge = $('#badge');
-  if (chatOpen) { seenLog = S.log.length; badge.style.display = 'none'; }
-  else { badge.style.display = unread > 0 && S.log.some((l, i) => i >= S.log.length - unread && l.k === 'chat') ? '' : 'none'; badge.textContent = unread > 9 ? '9+' : unread; }
-  if (!chatOpen && fromState) return;
-  const box = $('#msgs'); const atEnd = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-  box.replaceChildren(...S.log.map((l) => l.k === 'chat'
-    ? h('div', { class: 'c' }, h('b', { text: l.who + ': ' }), document.createTextNode(l.text))
-    : h('div', { class: 's', text: l.text })));
-  if (atEnd || !fromState) box.scrollTop = box.scrollHeight;
+    const dur = S.turnDuration || 10000;
+    const p = Math.max(0, Math.min(1, (S.turnDeadline - Date.now()) / dur));
+    const col = p < 0.3 ? '#e53935' : p < 0.6 ? '#fb8c00' : '#fdd835';
+    document.querySelectorAll('[data-timer="on"]').forEach((el) => {
+      el.style.setProperty('--p', String(p));
+      el.style.setProperty('--tcol', col);
+    });
+    timerRAF = requestAnimationFrame(run);
+  };
+  timerRAF = requestAnimationFrame(run);
 }
 
 // auto-rejoin after a reload
@@ -601,6 +553,97 @@ function renderChat(fromState) {
     if (r.ok) connect(r.room); else store.set('uno_room', null);
   }
 })();
+
+function render() {
+  if (!S) return;
+  document.title = `Uno Night - ${S.code}`;
+
+  // update players panel
+  const me = S.players.findIndex((p) => p.id === S.you), n = S.players.length;
+  const opps = $('#opps'); opps.replaceChildren();
+  for (let i = 1; i < n; i++) {
+    const p = S.players[(me + i) % n];
+    const backs = h('div', { class: 'oc' }, h('span', {}, ...Array.from({ length: Math.min(p.count, 6) }, () => h('div', { class: 'card back mini' }))), h('b', { text: p.count }));
+    backs.firstChild.style.display = 'flex';
+    const turnActive = p.id === S.turn && S.phase === 'playing';
+    opps.append(h('div', { class: 'opp' + (p.id === S.turn ? ' turn' : '') + (p.connected ? '' : ' off') },
+      h('div', { class: 'oh' }, avatarTimerNode(p.avatar, 'sm', turnActive), h('div', { class: 'on', text: p.name })),
+      backs,
+      p.wins ? h('div', { class: 'ow', text: '🏆 ' + p.wins }) : null,
+      S.host === S.you && !p.connected ? h('button', { class: 'x', text: '✕', title: 'Remove', onclick: () => act('kick', { target: p.id }) }) : null));
+  }
+
+  // update room info
+  $('#lcode').textContent = S.code;
+  $('#tcode').textContent = S.code;
+  $('#tdeck').textContent = S.deck ? `Deck: ${S.deck}` : '';
+  $('#status').textContent = S.phase === 'playing' ? 'Your turn' : S.phase === 'waiting' ? 'Waiting for players' : '';
+  $('#wait').style.display = S.phase === 'waiting' ? '' : 'none';
+
+  // update hands
+  const hand = $('#hand'); hand.replaceChildren();
+  for (const c of S.hand) hand.append(cardEl(c, 'ok'));
+  const mine = S.players.find((p) => p.id === S.you);
+  if (mine && mine.hand) {
+    const lbl = h('div', { class: 'hl' }, `Your hand (${mine.hand.length})`);
+    if (S.phase === 'playing' && S.turn === S.you) lbl.classList.add('blink');
+    hand.prepend(lbl);
+  }
+
+  // update turn timer
+  document.querySelectorAll('[data-timer="on"]').forEach((el) => { el.style.setProperty('--p', '1'); el.style.setProperty('--tcol', '#fdd835'); });
+  if (S.phase === 'playing' && S.turnDeadline) {
+    const dur = S.turnDuration || 10000;
+    const p = Math.max(0, Math.min(1, (S.turnDeadline - Date.now()) / dur));
+    const col = p < 0.3 ? '#e53935' : p < 0.6 ? '#fb8c00' : '#fdd835';
+    document.querySelectorAll('[data-timer="on"]').forEach((el) => {
+      el.style.setProperty('--p', String(p));
+      el.style.setProperty('--tcol', col);
+    });
+  }
+
+  // update chat log
+  if (chatOpen) { seenLog = S.log.length; renderChat(); }
+  maybeAnnounceUno();
+
+  const meP = S.players[me];
+  const hl = $('#hl');
+  hl.className = 'hlrow';
+  hl.replaceChildren(
+    avatarTimerNode(meP ? meP.avatar : myAvatar, 'sm', myTurn),
+    h('span', { text: `${meP ? meP.name : 'You'} · ${S.hand.length} card${S.hand.length === 1 ? '' : 's'}` + (meP && meP.wins ? ` · 🏆 ${meP.wins}` : '') })
+  );
+
+  // round over overlay
+  if (S.phase === 'over') {
+    const winner = S.players.find((p) => p.id === S.winner);
+    const youWon = S.winner === S.you;
+    $('#oresult').textContent = youWon ? 'You won!' : `${winner ? winner.name : 'Someone'} won!`;
+    $('#osub').textContent = youWon ? 'Nice play.' : 'Better luck next round.';
+    const sb = $('#oscores'); sb.replaceChildren();
+    for (const p of S.players) sb.append(h('div', { class: 'score' },
+      h('div', { class: 'sl' }, avatarNode(p.avatar, 'sm'), h('span', { text: p.name + (p.id === S.you ? ' (you)' : '') })),
+      h('span', { text: `🏆 ${p.wins}` })));
+    $('#again').style.display = S.host === S.you ? '' : 'none';
+    $('#owait').style.display = S.host === S.you ? 'none' : '';
+    $('#over').classList.add('on');
+  } else $('#over').classList.remove('on');
+
+  tickTimer();
+}
+
+// ---- render ----
+function render() {
+  if (!S) return;
+  maybeAnnounceUno();
+  if (S.phase === 'playing' && prevPhase !== 'playing') startMusic();
+  if (S.phase !== 'playing' && prevPhase === 'playing') stopMusic();
+  prevPhase = S.phase;
+  if (S.phase === 'lobby') { show('lobby'); renderLobby(); $('#over').classList.remove('on'); }
+  else { show('game'); renderGame(); }
+  renderChat(true);
+  tickTimer();
+}
 </script>
 </body>
 </html>
