@@ -286,7 +286,11 @@ function handleAct(room, p, b) {
     case 'uno': {
       if (!playing) return 'Not in a round';
       if (room.vuln === p.id) { room.vuln = null; addLog(room, `${p.name}: UNO!`); return null; }
-      if (p.hand.length <= 2) { p.said = true; return null; }
+      if (p.hand.length <= 2) {
+        if (!p.said) addLog(room, `${p.name}: UNO!`);
+        p.said = true;
+        return null;
+      }
       return "You don't need to call UNO yet";
     }
     case 'catch': {

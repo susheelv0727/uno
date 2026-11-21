@@ -107,7 +107,25 @@ label.chk input{width:20px;height:20px;accent-color:var(--y)}
 #status.me{color:var(--y)}
 #log3{font-size:12px;opacity:.7;text-align:center;min-height:48px;padding:0 14px}
 #actions{display:flex;gap:10px;justify-content:center;min-height:46px;padding:4px 10px;flex-wrap:wrap}
-.uno{background:var(--r);color:#fff;font-size:20px;padding:10px 26px;border-radius:99px;animation:pulse .8s infinite}
+.uno{
+  width:112px;height:112px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #ff7b7b 0%, #e53935 45%, #b71c1c 75%, #7f0000 100%);
+  color:#fff;font-size:28px;font-weight:900;letter-spacing:1px;
+  border:6px solid #4e0000;
+  box-shadow:0 10px 0 #3b0000, 0 16px 22px rgba(0,0,0,.45), inset 0 6px 12px rgba(255,255,255,.35), inset 0 -8px 14px rgba(0,0,0,.2);
+  display:inline-flex;align-items:center;justify-content:center;
+  text-shadow:0 2px 4px rgba(0,0,0,.55);
+  padding:0;line-height:1;
+  transition:transform .06s, box-shadow .06s, filter .1s;
+  animation:buzzPulse 1s infinite;
+}
+.uno:hover{filter:brightness(1.06)}
+.uno:active{
+  transform:translateY(8px) scale(.98);
+  box-shadow:0 2px 0 #3b0000, 0 6px 12px rgba(0,0,0,.4), inset 0 4px 8px rgba(255,255,255,.2), inset 0 -4px 10px rgba(0,0,0,.25);
+  animation:none;
+}
+@keyframes buzzPulse{50%{transform:scale(1.04);box-shadow:0 10px 0 #3b0000, 0 18px 28px rgba(229,57,53,.35), 0 16px 22px rgba(0,0,0,.45), inset 0 6px 12px rgba(255,255,255,.35), inset 0 -8px 14px rgba(0,0,0,.2)}}
 #hand{display:flex;justify-content:flex-start;overflow-x:auto;overflow-y:visible;padding:26px 14px 12px;scrollbar-width:none;-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
 #hand::-webkit-scrollbar{display:none}
 #hand .card{margin-left:calc(var(--cw)*var(--ol, -0.32));transition:transform .12s, box-shadow .12s, filter .12s;cursor:default}
